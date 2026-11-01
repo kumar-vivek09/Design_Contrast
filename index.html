@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Design System Contrast Auditor — a client-side WCAG 2.2 accessibility audit tool for design tokens.">
+  <title>Design System Auditor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <div id="app">
+    <!-- Region 1: Header — verdict bar, score, actions -->
+    <header id="header" role="banner"></header>
+
+    <main id="bench">
+      <!-- Left column: Token editors -->
+      <aside id="editors" aria-label="Token editors">
+        <!-- Region 2: Color token editor -->
+        <section id="color-editors" aria-label="Color tokens"></section>
+        <!-- Region 3: Typography scale editor -->
+        <section id="type-editors" aria-label="Typography scale"></section>
+        <!-- Region 4: Spacing scale editor -->
+        <section id="space-editors" aria-label="Spacing scale"></section>
+      </aside>
+
+      <!-- Center column: Matrix hero + preview -->
+      <section id="center" aria-label="Audit results">
+        <!-- Region 5: Contrast matrix -->
+        <div id="matrix" role="region" aria-label="Contrast matrix"></div>
+        <!-- Region 6: Live preview -->
+        <div id="preview" role="region" aria-label="Live preview"></div>
+      </section>
+
+      <!-- Right column: Issue queue -->
+      <!-- Region 7: Issue queue -->
+      <aside id="queue" aria-label="Issue queue"></aside>
+    </main>
+  </div>
+
+  <!-- Export dialog (modal) -->
+  <dialog id="export-dialog" aria-label="Export design system">
+    <div id="export-content"></div>
+  </dialog>
+
+  <!-- Add Token Dialog -->
+  <dialog id="add-token-dialog">
+    <div class="dialog-header">
+      <span class="dialog-title">ADD COLOR TOKEN</span>
+      <button class="btn-icon" data-action="close-add-dialog" aria-label="Close">✕</button>
+    </div>
+    <div class="dialog-body">
+      <div class="form-group">
+        <label for="add-token-name">Name</label>
+        <input type="text" id="add-token-name" class="token-name-input" placeholder="e.g. Danger" style="width:100%;margin-bottom:16px;padding:8px">
+      </div>
+      <div class="form-group" style="margin-bottom:16px">
+        <label>Color</label>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+          <input type="color" id="add-token-swatch" value="#D64545" data-action="sync-add-hex" style="width:32px;height:32px;padding:0;border:none;border-radius:4px">
+          <input type="text" id="add-token-hex" class="token-hex-input" value="#D64545" data-action="sync-add-swatch" style="flex:1;padding:8px" spellcheck="false">
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:16px">
+        <label for="add-token-role">Role</label>
+        <select id="add-token-role" class="token-role-select" data-action="change-add-role" style="width:100%;padding:8px;margin-top:4px">
+          <option value="foreground">Foreground</option>
+          <option value="surface">Surface</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="add-token-usage">Usage (Default)</label>
+        <select id="add-token-usage" class="token-role-select" style="width:100%;padding:8px;margin-top:4px">
+          <option value="body-text">Body Text</option>
+          <option value="large-text">Large Text</option>
+          <option value="ui-element">UI Element</option>
+          <option value="not-used">Not Used</option>
+        </select>
+      </div>
+    </div>
+    <div class="dialog-footer">
+      <button class="btn" data-action="close-add-dialog">Cancel</button>
+      <button class="btn btn-primary" data-action="submit-add-token">Add Token</button>
+    </div>
+  </dialog>
+
+  <!-- Hidden file input for import -->
+  <input type="file" id="import-input" accept=".json" hidden aria-label="Import design system file">
+
+  <script src="app.js"></script>
+</body>
+</html>

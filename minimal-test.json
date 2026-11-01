@@ -1,0 +1,6 @@
+{
+  "colors": [
+    {"id": "danger", "value": "#D64545"},
+    {"id": "surface", "value": "#FFFFFF"}
+  ]
+}
