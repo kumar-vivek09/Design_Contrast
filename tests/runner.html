@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>INTEGRAMIND — Automated Test Suite Runner</title>
+  <style>
+    :root {
+      --bg: #0F172A;
+      --panel: #1E293B;
+      --border: #334155;
+      --text: #F8FAFC;
+      --muted: #94A3B8;
+      --pass: #10B981;
+      --fail: #EF4444;
+      --warn: #F59E0B;
+      --blue: #3B82F6;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 32px 24px;
+      line-height: 1.5;
+    }
+    .container { max-width: 960px; margin: 0 auto; }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    h1 { font-size: 24px; font-weight: 700; }
+    .subtitle { font-size: 14px; color: var(--muted); margin-top: 4px; }
+    .stats-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .stat-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      text-align: center;
+    }
+    .stat-num { font-size: 28px; font-weight: 700; margin-top: 4px; }
+    .stat-pass { color: var(--pass); }
+    .stat-fail { color: var(--fail); }
+    .stat-total { color: var(--blue); }
+    .stat-time { color: var(--text); }
+    .stat-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+
+    .btn {
+      background: var(--blue);
+      color: #FFF;
+      border: none;
+      border-radius: 6px;
+      padding: 10px 18px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .btn:hover { opacity: 0.9; }
+
+    .suite-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 16px;
+      overflow: hidden;
+    }
+    .suite-header {
+      background: rgba(255,255,255,0.03);
+      padding: 14px 18px;
+      font-weight: 600;
+      font-size: 15px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+    }
+    .test-list { list-style: none; }
+    .test-item {
+      padding: 12px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      font-size: 13px;
+    }
+    .test-item:last-child { border-bottom: none; }
+    .badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .badge-pass { background: rgba(16, 185, 129, 0.15); color: var(--pass); border: 1px solid var(--pass); }
+    .badge-fail { background: rgba(239, 68, 68, 0.15); color: var(--fail); border: 1px solid var(--fail); }
+    .test-time { font-family: monospace; color: var(--muted); margin-left: 12px; font-size: 12px; }
+    .test-title { font-weight: 500; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>INTEGRAMIND — Test Suite Runner</h1>
+        <div class="subtitle">Design System Auditor Verification & Accessibility Compliance Suite</div>
+      </div>
+      <button class="btn" onclick="runAllBrowserTests()">Re-Run Tests</button>
+    </header>
+
+    <div class="stats-bar">
+      <div class="stat-card">
+        <div class="stat-label">Total Tests</div>
+        <div class="stat-num stat-total" id="stat-total">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Passed</div>
+        <div class="stat-num stat-pass" id="stat-passed">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Failed</div>
+        <div class="stat-num stat-fail" id="stat-failed">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Execution Time</div>
+        <div class="stat-num stat-time" id="stat-time">0 ms</div>
+      </div>
+    </div>
+
+    <div id="suites-container"></div>
+  </div>
+
+  <!-- Load Core Auditor Code -->
+  <script src="../app.js"></script>
+
+  <script>
+    // Browser-based test harness
+    const suites = [];
+    let currentSuite = null;
+
+    function describe(name, fn) {
+      const suite = { name, tests: [] };
+      suites.push(suite);
+      currentSuite = suite;
+      fn();
+    }
+
+    function test(title, fn) {
+      currentSuite.tests.push({ title, fn });
+    }
+
+    function assert(cond, msg = 'Assertion failed') {
+      if (!cond) throw new Error(msg);
+    }
+    assert.equal = (a, b, msg) => {
+      if (a !== b) throw new Error(msg || `Expected ${JSON.stringify(a)} === ${JSON.stringify(b)}`);
+    };
+    assert.notEqual = (a, b, msg) => {
+      if (a === b) throw new Error(msg || `Expected ${JSON.stringify(a)} !== ${JSON.stringify(b)}`);
+    };
+    assert.deepEqual = (a, b, msg) => {
+      const ja = JSON.stringify(a);
+      const jb = JSON.stringify(b);
+      if (ja !== jb) throw new Error(msg || `Expected deep equality:\nActual: ${ja}\nExpected: ${jb}`);
+    };
+    assert.ok = (v, msg) => { if (!v) throw new Error(msg || 'Value is falsy'); };
+    assert.throws = (fn, regex, msg) => {
+      let threw = false;
+      try { fn(); } catch (e) {
+        threw = true;
+        if (regex && !regex.test(e.message)) {
+          throw new Error(`Expected error message matching ${regex}, got "${e.message}"`);
+        }
+      }
+      if (!threw) throw new Error(msg || 'Expected function to throw');
+    };
+
+    // Suite 1: Color Science
+    describe('Layer 0: Color Science (L0)', () => {
+      test('TC-COLOR-01: parses 6-digit hex string correctly', () => {
+        assert.deepEqual(hexToRGB('#000000'), [0, 0, 0]);
+        assert.deepEqual(hexToRGB('#FFFFFF'), [255, 255, 255]);
+        assert.deepEqual(hexToRGB('#2B4ACB'), [43, 74, 203]);
+      });
+      test('TC-COLOR-02: parses 3-digit shorthand hex string correctly', () => {
+        assert.deepEqual(hexToRGB('#FFF'), [255, 255, 255]);
+        assert.deepEqual(hexToRGB('#000'), [0, 0, 0]);
+      });
+      test('TC-COLOR-03: parses 4-digit and 8-digit hex strings', () => {
+        assert.deepEqual(hexToRGB('#FFFF'), [255, 255, 255]);
+        assert.deepEqual(hexToRGB('#FFFFFF80'), [255, 255, 255]);
+      });
+      test('TC-COLOR-04: handles invalid hex gracefully with fallback to black', () => {
+        assert.deepEqual(hexToRGB('invalid'), [0, 0, 0]);
+      });
+      test('TC-COLOR-05: converts [r, g, b] to uppercase 6-char hex', () => {
+        assert.equal(rgbToHex(43, 74, 203), '#2B4ACB');
+      });
+      test('TC-COLOR-06: clamps RGB values outside [0, 255] gamut boundaries', () => {
+        assert.equal(rgbToHex(-20, 300, 128), '#00FF80');
+      });
+      test('TC-COLOR-07: converts sRGB channels to linear light and back', () => {
+        const val = 0.5;
+        assert.ok(Math.abs(val - delinearize(linearize(val))) < 1e-4);
+      });
+      test('TC-COLOR-08: linearizes zero and full scale exactly', () => {
+        assert.equal(linearize(0), 0);
+        assert.equal(linearize(1), 1);
+      });
+      test('TC-COLOR-09: computes normative relative luminance per WCAG 2.x', () => {
+        assert.equal(luminance('#000000'), 0);
+        assert.equal(luminance('#FFFFFF'), 1);
+      });
+      test('TC-COLOR-10: maximum possible contrast (black on white is 21:1)', () => {
+        assert.equal(wcagContrast('#000000', '#FFFFFF'), 21);
+      });
+      test('TC-COLOR-11: minimum possible contrast (identical colors is 1:1)', () => {
+        assert.equal(wcagContrast('#FFFFFF', '#FFFFFF'), 1);
+      });
+      test('TC-COLOR-12: contrast is symmetric (commutative)', () => {
+        assert.equal(wcagContrast('#2B4ACB', '#FFFFFF'), wcagContrast('#FFFFFF', '#2B4ACB'));
+      });
+      test('TC-COLOR-13: calculates known reference color pairs correctly', () => {
+        const dangerOnWhite = wcagContrast('#D64545', '#FFFFFF');
+        assert.ok(Math.abs(dangerOnWhite - 4.38) < 0.05);
+      });
+      test('TC-COLOR-14: calculates APCA lightness contrast polarity', () => {
+        assert.ok(apcaLc('#1A1F27', '#FFFFFF') > 80);
+      });
+      test('TC-COLOR-15: identical colors have 0 APCA contrast', () => {
+        assert.equal(apcaLc('#FFFFFF', '#FFFFFF'), 0);
+      });
+      test('TC-COLOR-16: converts sRGB to OKLab and round-trips with high fidelity', () => {
+        const [L, a, b] = srgbToOklab('#2B4ACB');
+        assert.equal(oklabToHex(L, a, b), '#2B4ACB');
+      });
+      test('TC-COLOR-17: OKLab lightness L correlates with perceived brightness', () => {
+        const [lBlack] = srgbToOklab('#000000');
+        const [lWhite] = srgbToOklab('#FFFFFF');
+        assert.ok(lBlack < lWhite);
+      });
+    });
+
+    // Suite 2: Audit Rules
+    describe('Layer 1 & 3: Audit Rules & Derived Projections (L1 & L3)', () => {
+      test('TC-AUDIT-01: returns correct WCAG AA contrast ratios per usage', () => {
+        assert.equal(requiredRatio(USAGE.BODY_TEXT), 4.5);
+        assert.equal(requiredRatio(USAGE.LARGE_TEXT), 3.0);
+        assert.equal(requiredRatio(USAGE.UI_ELEMENT), 3.0);
+        assert.equal(requiredRatio(USAGE.NOT_USED), null);
+      });
+      test('TC-AUDIT-02: returns NOT_APPLICABLE for not-used or null requirements', () => {
+        assert.equal(classify(1.2, USAGE.NOT_USED).status, STATUS.NOT_APPLICABLE);
+      });
+      test('TC-AUDIT-03: returns PASS when ratio meets or exceeds required ratio', () => {
+        assert.equal(classify(4.5, USAGE.BODY_TEXT).status, STATUS.PASS);
+      });
+      test('TC-AUDIT-04: returns WARNING when ratio is within 90% of requirement', () => {
+        assert.equal(classify(4.1, USAGE.BODY_TEXT).status, STATUS.WARNING);
+      });
+      test('TC-AUDIT-05: returns FAIL when ratio is below 90% of requirement', () => {
+        assert.equal(classify(3.9, USAGE.BODY_TEXT).status, STATUS.FAIL);
+      });
+      test('TC-AUDIT-06: flags isLookalike when contrast ratio is below 1.6:1', () => {
+        assert.equal(classify(1.4, USAGE.BODY_TEXT).isLookalike, true);
+        assert.equal(classify(2.5, USAGE.BODY_TEXT).isLookalike, false);
+      });
+      test('TC-AUDIT-07: flags typography size below 12px minimum', () => {
+        S.type = [{ id: 'tiny', name: 'Tiny', size: 10, lineHeight: 1.4, weight: 400 }];
+        const issues = deriveTypeIssues();
+        assert.ok(issues.some(i => i.label.includes('size')));
+      });
+      test('TC-AUDIT-08: flags body text with line-height below 1.4', () => {
+        S.type = [{ id: 'body', name: 'Body', size: 16, lineHeight: 1.2, weight: 400 }];
+        const issues = deriveTypeIssues();
+        assert.ok(issues.some(i => i.label.includes('line-height')));
+      });
+      test('TC-AUDIT-09: flags duplicate rendered font sizes across different tokens', () => {
+        S.type = [
+          { id: 't1', name: 'T1', size: 16, lineHeight: 1.5, weight: 400 },
+          { id: 't2', name: 'T2', size: 16, lineHeight: 1.5, weight: 400 }
+        ];
+        const issues = deriveTypeIssues();
+        assert.ok(issues.some(i => i.detail.includes('same pixel size')));
+      });
+      test('TC-AUDIT-10: flags negative spacing values as FAIL', () => {
+        S.space = [{ id: 's-neg', name: 'Neg', value: -5 }];
+        const issues = deriveSpaceIssues();
+        assert.ok(issues.some(i => i.status === STATUS.FAIL));
+      });
+      test('TC-AUDIT-11: flags spacing steps that differ by 1px or less', () => {
+        S.space = [{ id: 's1', name: 's1', value: 10 }, { id: 's2', name: 's2', value: 11 }];
+        const issues = deriveSpaceIssues();
+        assert.ok(issues.some(i => i.status === STATUS.WARNING));
+      });
+      test('TC-AUDIT-12: computes pair results and accurate verdict tallies', () => {
+        S = SAMPLE();
+        const results = pairResults();
+        const counts = verdictDistribution(results);
+        assert.equal(counts.pass + counts.fail + counts.warning + counts.na + counts.dismissed, results.length);
+      });
+      test('TC-AUDIT-13: marks dismissed pairs correctly', () => {
+        S = SAMPLE();
+        const first = S.pairs[0];
+        S.ui.dismissedPairs[first.id] = true;
+        const audited = pairResults().find(r => r.id === first.id);
+        assert.equal(audited.status, STATUS.DISMISSED);
+      });
+    });
+
+    // Suite 3: State & Import
+    describe('Layer 2 & 6: State Model & Flexible Importer (L2 & L6)', () => {
+      test('TC-STATE-01: validates 3-digit and 6-digit hex strings', () => {
+        assert.equal(isValidHex('#FFF'), true);
+        assert.equal(isValidHex('#1A1F27'), true);
+        assert.equal(isValidHex('1A1F27'), false);
+      });
+      test('TC-STATE-02: normalizes 3-char hex to 6-char uppercase', () => {
+        assert.equal(normalizeHex('#fff'), '#FFFFFF');
+      });
+      test('TC-STATE-03: EMPTY_STATE returns clean zero-token structure', () => {
+        const state = EMPTY_STATE();
+        assert.equal(state.colors.length, 0);
+      });
+      test('TC-STATE-04: SAMPLE returns populated starter tokens', () => {
+        const state = SAMPLE();
+        assert.ok(state.colors.length >= 8);
+      });
+      test('TC-STATE-05: auto-synthesizes missing pairs and defaults usage to not-used', () => {
+        const state = {
+          version: 1,
+          colors: [
+            { id: 'fg1', name: 'Text', hex: '#111111', role: 'foreground' },
+            { id: 'bg1', name: 'Card', hex: '#FFFFFF', role: 'surface' }
+          ],
+          pairs: [], type: [], space: [], ui: {}
+        };
+        reconcile(state);
+        assert.equal(state.pairs.length, 1);
+        assert.equal(state.pairs[0].usage, USAGE.NOT_USED);
+      });
+      test('TC-STATE-06: respects explicit usage defined on foreground token', () => {
+        const state = {
+          version: 1,
+          colors: [
+            { id: 'btn', name: 'Btn', hex: '#2B4ACB', role: 'foreground', usage: USAGE.LARGE_TEXT },
+            { id: 'bg1', name: 'Card', hex: '#FFFFFF', role: 'surface' }
+          ],
+          pairs: [], type: [], space: [], ui: {}
+        };
+        reconcile(state);
+        assert.equal(state.pairs[0].usage, USAGE.LARGE_TEXT);
+      });
+      test('TC-STATE-07: does NOT create pairs for unassigned tokens', () => {
+        const state = {
+          version: 1,
+          colors: [
+            { id: 'd', name: 'Danger', hex: '#D64545', role: 'unassigned' },
+            { id: 's', name: 'Surface', hex: '#FFFFFF', role: 'surface' }
+          ],
+          pairs: [], type: [], space: [], ui: {}
+        };
+        reconcile(state);
+        assert.equal(state.pairs.length, 0);
+      });
+      test('TC-STATE-08: removes orphan pairs when tokens are deleted', () => {
+        const state = {
+          version: 1,
+          colors: [{ id: 'fg1', hex: '#111111', role: 'foreground' }, { id: 'bg1', hex: '#FFFFFF', role: 'surface' }],
+          pairs: [{ id: 'del', fg: 'non-existent', bg: 'bg1', usage: USAGE.BODY_TEXT }],
+          type: [], space: [], ui: {}
+        };
+        reconcile(state);
+        assert.equal(state.pairs.some(p => p.fg === 'non-existent'), false);
+      });
+      test('TC-IMPORT-01: imports minimal JSON with only colors array', () => {
+        const { state, stats } = processImport({ colors: [{ id: 'c1', value: '#123456' }] }, SAMPLE());
+        assert.equal(stats.colors, 1);
+        assert.equal(state.colors[0].role, 'unassigned');
+      });
+      test('TC-IMPORT-02: imports JSON with explicit semantic roles and usages', () => {
+        const { state } = processImport({
+          colors: [
+            { id: 't', hex: '#111111', role: 'foreground', usage: 'body-text' },
+            { id: 's', hex: '#FFFFFF', role: 'surface' }
+          ]
+        }, SAMPLE());
+        assert.equal(state.pairs[0].usage, 'body-text');
+      });
+      test('TC-IMPORT-03: rejects JSON missing colors array', () => {
+        assert.throws(() => processImport({}), /Missing colors array/);
+      });
+      test('TC-IMPORT-04: rejects non-object or malformed input', () => {
+        assert.throws(() => processImport(null));
+      });
+      test('TC-IMPORT-05: ignores explicitly invalid pairs from imported data', () => {
+        const { stats } = processImport({
+          colors: [{ id: 't', hex: '#111111', role: 'foreground' }, { id: 's', hex: '#FFFFFF', role: 'surface' }],
+          pairs: [{ id: 'p', fg: 'invalid', bg: 's', usage: 'body-text' }]
+        }, SAMPLE());
+        assert.equal(stats.skippedPairs, 1);
+      });
+    });
+
+    // Suite 4: Solver
+    describe('Layer 4: Constraint Solver & Proposal Engine (L4)', () => {
+      test('TC-SOLVER-01: darkens foreground to reach target contrast against light background', () => {
+        const res = reachTarget('#D64545', '#FFFFFF', 4.5);
+        assert.ok(wcagContrast(res, '#FFFFFF') >= 4.5);
+      });
+      test('TC-SOLVER-02: lightens foreground to reach target contrast against dark background', () => {
+        const res = reachTarget('#666E7C', '#111111', 4.5);
+        assert.ok(wcagContrast(res, '#111111') >= 4.5);
+      });
+      test('TC-SOLVER-03: returns original or near-original if already meeting target', () => {
+        assert.ok(wcagContrast(reachTarget('#000000', '#FFFFFF', 4.5), '#FFFFFF') >= 4.5);
+      });
+      test('TC-SOLVER-04: returns "already-passing" for tokens that satisfy all constraints', () => {
+        S = SAMPLE();
+        assert.equal(satisfyAll('ink').outcome, 'already-passing');
+      });
+      test('TC-SOLVER-05: returns "no-constraints" for tokens without active usage', () => {
+        S = SAMPLE();
+        S.pairs.forEach(p => { if (p.fg === 'brand') p.usage = USAGE.NOT_USED; });
+        assert.equal(satisfyAll('brand').outcome, 'no-constraints');
+      });
+      test('TC-SOLVER-06: successfully solves solvable multi-surface constraints', () => {
+        S = SAMPLE();
+        const prop = satisfyAll('danger');
+        assert.equal(prop.outcome, 'solved');
+        assert.ok(wcagContrast(prop.to, hexFor('surface')) >= 4.5);
+        assert.ok(wcagContrast(prop.to, hexFor('canvas')) >= 4.5);
+      });
+      test('TC-SOLVER-07: diagnoses "unsatisfiable" when constraints are mathematically incompatible', () => {
+        S.colors = [
+          { id: 'fg-c', hex: '#333333', role: 'foreground', usage: USAGE.BODY_TEXT },
+          { id: 'bg1', hex: '#FFFFFF', role: 'surface' },
+          { id: 'bg2', hex: '#888888', role: 'surface' },
+          { id: 'bg3', hex: '#000000', role: 'surface' }
+        ];
+        S.pairs = [
+          { id: 'c1', fg: 'fg-c', bg: 'bg1', usage: USAGE.BODY_TEXT },
+          { id: 'c2', fg: 'fg-c', bg: 'bg2', usage: USAGE.BODY_TEXT },
+          { id: 'c3', fg: 'fg-c', bg: 'bg3', usage: USAGE.BODY_TEXT }
+        ];
+        assert.equal(satisfyAll('fg-c').outcome, 'unsatisfiable');
+      });
+      test('TC-SOLVER-08: never mutates application state S during calculation', () => {
+        S = SAMPLE();
+        const before = JSON.stringify(S);
+        satisfyAll('danger');
+        assert.equal(JSON.stringify(S), before);
+      });
+    });
+
+    function runAllBrowserTests() {
+      const container = document.getElementById('suites-container');
+      container.innerHTML = '';
+      let total = 0;
+      let passed = 0;
+      let failed = 0;
+      const t0 = performance.now();
+
+      suites.forEach(suite => {
+        const card = document.createElement('div');
+        card.className = 'suite-card';
+
+        const header = document.createElement('div');
+        header.className = 'suite-header';
+        header.textContent = suite.name;
+        card.appendChild(header);
+
+        const list = document.createElement('ul');
+        list.className = 'test-list';
+
+        suite.tests.forEach(t => {
+          total++;
+          const item = document.createElement('li');
+          item.className = 'test-item';
+
+          const tStart = performance.now();
+          let ok = true;
+          let err = null;
+          try {
+            t.fn();
+          } catch (e) {
+            ok = false;
+            err = e;
+          }
+          const tElapsed = (performance.now() - tStart).toFixed(2);
+
+          if (ok) passed++; else failed++;
+
+          item.innerHTML = `
+            <div>
+              <span class="test-title">${t.title}</span>
+              <span class="test-time">${tElapsed} ms</span>
+              ${err ? `<div style="color:var(--fail);font-size:12px;margin-top:4px">${err.message}</div>` : ''}
+            </div>
+            <span class="badge ${ok ? 'badge-pass' : 'badge-fail'}">${ok ? 'PASS' : 'FAIL'}</span>
+          `;
+          list.appendChild(item);
+        });
+
+        card.appendChild(list);
+        container.appendChild(card);
+      });
+
+      const totalTime = (performance.now() - t0).toFixed(1);
+      document.getElementById('stat-total').textContent = total;
+      document.getElementById('stat-passed').textContent = passed;
+      document.getElementById('stat-failed').textContent = failed;
+      document.getElementById('stat-time').textContent = totalTime + ' ms';
+    }
+
+    // Auto-run on load
+    runAllBrowserTests();
+  </script>
+</body>
+</html>
+

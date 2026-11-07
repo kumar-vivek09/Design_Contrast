@@ -92,4 +92,35 @@
 
   <script src="app.js"></script>
 </body>
+<script>
+  const ul = document.querySelector("ul");
+
+  if (ul) {
+    console.log(ul.children);
+
+    const firstChild = ul.firstElementChild;
+    if (firstChild) {
+      firstChild.style.color = "blue";
+
+      if (firstChild.nextElementSibling) {
+        firstChild.nextElementSibling.style.textDecoration = "underline";
+      }
+    }
+
+    const lastChild = ul.lastElementChild;
+    if (lastChild) {
+      lastChild.style.border = "1px solid black";
+
+      if (lastChild.previousElementSibling) {
+        lastChild.previousElementSibling.textContent = "second last";
+      }
+    }
+  }
+
+  const child = document.querySelector("p");
+  if (child) {
+    console.log(child.parentElement);
+    console.log(child.parentNode);
+  }
+</script>
 </html>

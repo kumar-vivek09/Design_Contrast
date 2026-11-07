@@ -1,0 +1,21 @@
+{
+  "name": "integramind-design-system-auditor",
+  "version": "1.0.0",
+  "description": "Continuous accessibility auditor & constraint solver for design system tokens",
+  "main": "app.js",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "test:watch": "node --test --watch tests/*.test.js"
+  },
+  "keywords": [
+    "design-system",
+    "accessibility",
+    "wcag",
+    "contrast",
+    "apca",
+    "oklab"
+  ],
+  "author": "",
+  "license": "ISC"
+}
+

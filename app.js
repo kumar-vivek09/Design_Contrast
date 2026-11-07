@@ -373,6 +373,8 @@ function reconcile(state) {
   });
 
   // 3. Clean dismissed pairs referencing deleted pairs
+  state.ui = state.ui || {};
+  state.ui.dismissedPairs = state.ui.dismissedPairs || {};
   const pairIds = new Set(state.pairs.map(p => p.id));
   for (const key of Object.keys(state.ui.dismissedPairs)) {
     if (!pairIds.has(key)) {
@@ -548,6 +550,13 @@ function deriveSpaceIssues() {
   const issues = [];
   const sorted = [...S.space].sort((a, b) => a.value - b.value);
 
+  // Check all tokens for negative values
+  sorted.forEach(sp => {
+    if (sp.value < 0) {
+      issues.push({ type: 'space', tokenId: sp.id, label: sp.name, detail: 'Negative spacing value', status: STATUS.FAIL });
+    }
+  });
+
   for (let i = 1; i < sorted.length; i++) {
     const diff = sorted[i].value - sorted[i - 1].value;
     if (diff <= 1 && diff >= 0) {
@@ -558,9 +567,6 @@ function deriveSpaceIssues() {
         detail: sorted[i - 1].value + 'px and ' + sorted[i].value + 'px are effectively identical',
         status: STATUS.WARNING
       });
-    }
-    if (sorted[i].value < 0) {
-      issues.push({ type: 'space', tokenId: sorted[i].id, label: sorted[i].name, detail: 'Negative spacing value', status: STATUS.FAIL });
     }
   }
 
@@ -1348,6 +1354,7 @@ function applyTheme() {
 }
 
 /* ─── Click delegation ──────────────────────────────────────────────── */
+if (typeof document !== 'undefined') {
 document.addEventListener('click', function(e) {
   const btn = e.target.closest('[data-action]');
   if (!btn) return;
@@ -1585,8 +1592,10 @@ document.addEventListener('click', function(e) {
     }
   }
 });
+}
 
 /* ─── Input delegation (fast path for editors) ──────────────────────── */
+if (typeof document !== 'undefined') {
 document.addEventListener('input', function(e) {
   const el = e.target;
   const action = el.dataset.action;
@@ -1720,112 +1729,107 @@ document.addEventListener('input', function(e) {
     }
   }
 });
+}
+
+/**
+ * Process and normalize imported design system data.
+ * Pure logic; does not touch DOM.
+ */
+function processImport(data, currentState) {
+  const parsed = typeof data === 'string' ? JSON.parse(data) : JSON.parse(JSON.stringify(data));
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('Invalid JSON format');
+  }
+  if (!Array.isArray(parsed.colors)) {
+    const gotType = typeof parsed.colors;
+    const gotVal = JSON.stringify(parsed.colors) || 'undefined';
+    throw new Error(`Missing colors array. Expected array, got ${gotType}: ${gotVal}. (Check if your JSON has "colors": [...] at the root)`);
+  }
+
+  const baseState = currentState || S || EMPTY_STATE();
+  let stats = { colors: 0, type: 0, space: 0, missingRole: 0, skippedPairs: 0 };
+
+  parsed.pairs = Array.isArray(parsed.pairs) ? parsed.pairs : [];
+  parsed.type = Array.isArray(parsed.type) ? parsed.type : (baseState.type ? JSON.parse(JSON.stringify(baseState.type)) : []);
+  parsed.space = Array.isArray(parsed.space) ? parsed.space : (baseState.space ? JSON.parse(JSON.stringify(baseState.space)) : []);
+
+  parsed.colors = parsed.colors.filter(c => c && c.id && ((c.value && isValidHex(c.value)) || (c.hex && isValidHex(c.hex))));
+  parsed.colors.forEach(c => {
+    c.hex = normalizeHex(c.hex || c.value);
+    c.name = c.name || c.id;
+    if (c.role !== 'foreground' && c.role !== 'surface') {
+      c.role = 'unassigned';
+      stats.missingRole++;
+    }
+    stats.colors++;
+  });
+
+  stats.type = parsed.type.length;
+  stats.space = parsed.space.length;
+
+  const colorMap = Object.fromEntries(parsed.colors.map(c => [c.id, c]));
+  const validPairs = [];
+  parsed.pairs.forEach(p => {
+    const fg = colorMap[p.fg];
+    const bg = colorMap[p.bg];
+    if (!fg || !bg || fg.role !== 'foreground' || bg.role !== 'surface') {
+      stats.skippedPairs++;
+    } else {
+      validPairs.push(p);
+    }
+  });
+  parsed.pairs = validPairs;
+
+  parsed.version = STATE_VERSION;
+  parsed.ui = {
+    dismissedPairs: {},
+    expandedIssue: null,
+    theme: baseState.ui?.theme || 'auto',
+    exportTab: 'json',
+    solverFeedback: {}
+  };
+
+  reconcile(parsed);
+
+  return { state: parsed, stats };
+}
 
 /* ─── Import file handler ───────────────────────────────────────────── */
-document.getElementById('import-input').addEventListener('change', function(e) {
-  const file = e.target.files[0];
-  if (!file) return;
+if (typeof document !== 'undefined') {
+  document.getElementById('import-input')?.addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
 
-  const reader = new FileReader();
-  reader.onload = function(ev) {
-    try {
-      const parsed = JSON.parse(ev.target.result);
-      
-      console.log('--- IMPORT TRACE ---');
-      console.log('1. Raw file content:', ev.target.result);
-      console.log('2. Parsed object:', parsed);
-      console.log('3. Type of parsed:', typeof parsed);
-      console.log('4. parsed.colors:', parsed?.colors);
-      console.log('5. Array.isArray(parsed.colors):', Array.isArray(parsed?.colors));
+    const reader = new FileReader();
+    reader.onload = function(ev) {
+      try {
+        console.log('--- IMPORT TRACE ---');
+        console.log('1. Raw file content:', ev.target.result);
 
-      // Schema validation (Flexible)
-      if (!parsed || typeof parsed !== 'object') {
-        console.error('Validation failed: Invalid JSON format');
-        throw new Error('Invalid JSON format');
-      }
-      
-      if (!Array.isArray(parsed.colors)) {
-        console.error('Validation failed: Missing colors array. parsed.colors is:', parsed.colors);
-        const gotType = typeof parsed.colors;
-        const gotVal = JSON.stringify(parsed.colors) || 'undefined';
-        throw new Error(`Missing colors array. Expected array, got ${gotType}: ${gotVal}. (Check if your JSON has "colors": [...] at the root)`);
-      }
+        const { state, stats } = processImport(ev.target.result, S);
+        S = state;
+        applyTheme();
+        render();
 
-      let stats = { colors: 0, type: 0, space: 0, missingRole: 0, skippedPairs: 0 };
-
-      // Ensure arrays fallback to current state if absent
-      parsed.pairs = Array.isArray(parsed.pairs) ? parsed.pairs : [];
-      parsed.type = Array.isArray(parsed.type) ? parsed.type : S.type;
-      parsed.space = Array.isArray(parsed.space) ? parsed.space : S.space;
-
-      // Validate colors and normalize roles
-      parsed.colors = parsed.colors.filter(c => c.id && c.value && isValidHex(c.value) || c.id && c.hex && isValidHex(c.hex));
-      parsed.colors.forEach(c => { 
-        c.hex = normalizeHex(c.hex || c.value);
-        c.name = c.name || c.id;
-        if (c.role !== 'foreground' && c.role !== 'surface') {
-          c.role = 'unassigned';
-          stats.missingRole++;
+        let msg = 'IMPORT COMPLETE\n\n';
+        msg += `✓ ${stats.colors} color tokens imported\n`;
+        msg += `✓ ${stats.type} typography tokens imported\n`;
+        msg += `✓ ${stats.space} spacing tokens imported\n\n`;
+        if (stats.missingRole > 0) {
+          msg += `⚠ ${stats.missingRole} token(s) have no assigned role (marked Unassigned)\n`;
         }
-        stats.colors++;
-      });
-      
-      stats.type = parsed.type.length;
-      stats.space = parsed.space.length;
-
-      // Validate explicitly provided pairs (if any)
-      const colorMap = Object.fromEntries(parsed.colors.map(c => [c.id, c]));
-      const validPairs = [];
-      parsed.pairs.forEach(p => {
-        const fg = colorMap[p.fg];
-        const bg = colorMap[p.bg];
-        if (!fg || !bg || fg.role !== 'foreground' || bg.role !== 'surface') {
-          stats.skippedPairs++;
-        } else {
-          validPairs.push(p);
+        if (stats.skippedPairs > 0) {
+          msg += `⚠ ${stats.skippedPairs} imported relationship(s) were ignored because their token references or roles were invalid\n`;
         }
-      });
-      parsed.pairs = validPairs;
-
-      // Ensure version & UI
-      parsed.version = STATE_VERSION;
-      parsed.ui = {
-        dismissedPairs: {},
-        expandedIssue: null,
-        theme: S.ui.theme,
-        exportTab: 'json',
-        solverFeedback: {}
-      };
-
-      // Run reconciliation (auto-generates missing eligible relationships)
-      reconcile(parsed);
-
-      S = parsed;
-      applyTheme();
-      render();
-
-      // Show summary
-      let msg = 'IMPORT COMPLETE\n\n';
-      msg += `✓ ${stats.colors} color tokens imported\n`;
-      msg += `✓ ${stats.type} typography tokens imported\n`;
-      msg += `✓ ${stats.space} spacing tokens imported\n\n`;
-      if (stats.missingRole > 0) {
-        msg += `⚠ ${stats.missingRole} token(s) have no assigned role (marked Unassigned)\n`;
+        alert(msg);
+      } catch (err) {
+        alert('Import failed: ' + err.message);
       }
-      if (stats.skippedPairs > 0) {
-        msg += `⚠ ${stats.skippedPairs} imported relationship(s) were ignored because their token references or roles were invalid\n`;
-      }
-      alert(msg);
-
-    } catch (err) {
-      alert('Import failed: ' + err.message);
-    }
-  };
-  reader.readAsText(file);
-
-  // Reset input so re-importing the same file triggers change
-  e.target.value = '';
-});
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  });
+}
 
 /* ─── Export dialog rendering ───────────────────────────────────────── */
 function renderExportDialog() {
@@ -1949,14 +1953,73 @@ function renderExportDialog() {
 }
 
 /* ─── Close dialog on backdrop click ────────────────────────────────── */
-document.getElementById('export-dialog').addEventListener('click', function(e) {
-  if (e.target === this) this.close();
-});
+if (typeof document !== 'undefined') {
+  document.getElementById('export-dialog')?.addEventListener('click', function(e) {
+    if (e.target === this) this.close();
+  });
 
-document.getElementById('add-token-dialog').addEventListener('click', function(e) {
-  if (e.target === this) this.close();
-});
+  document.getElementById('add-token-dialog')?.addEventListener('click', function(e) {
+    if (e.target === this) this.close();
+  });
 
-/* ─── Initial render ────────────────────────────────────────────────── */
-applyTheme();
-render();
+  /* ─── Initial render ────────────────────────────────────────────────── */
+  applyTheme();
+  render();
+}
+
+/* ─── Node.js / CommonJS exports for test suites ────────────────────── */
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    // L0 — Color Science
+    hexToRGB,
+    rgbToHex,
+    linearize,
+    delinearize,
+    luminance,
+    wcagContrast,
+    apcaLc,
+    srgbToOklab,
+    oklabToHex,
+    oklabToLinearRGB,
+
+    // L1 — Audit Rules
+    USAGE,
+    STATUS,
+    WCAG_CRITERION,
+    LOOKALIKE_THRESHOLD,
+    requiredRatio,
+    classify,
+
+    // L2 — State Model
+    STATE_VERSION,
+    STORAGE_KEY,
+    isValidHex,
+    normalizeHex,
+    EMPTY_STATE,
+    SAMPLE,
+    reconcile,
+    saveState,
+    loadState,
+    colorById,
+    hexFor,
+    surfaces,
+    foregrounds,
+    newId,
+    getState: () => S,
+    setState: (newState) => { S = newState; },
+
+    // L3 — Derived Projections
+    pairResults,
+    auditIssues,
+    deriveTypeIssues,
+    deriveSpaceIssues,
+    verdictDistribution,
+
+    // L4 — Solver / Proposals
+    reachTarget,
+    satisfyAll,
+
+    // L6 — Import
+    processImport
+  };
+}
